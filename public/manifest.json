@@ -1,0 +1,17 @@
+{
+    "name": "Expense Tracker",
+    "short_name": "Expenses",
+    "description": "Track your expenses and cash flow.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#000000",
+    "icons": [
+        {
+            "src": "/file.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+}
