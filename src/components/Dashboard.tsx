@@ -6,11 +6,12 @@ import {
     getPeriodSummary,
     getCategorySummary,
     capitalize,
-    formatCurrency
+    formatCurrency,
+    formatDate
 } from '@/lib/utils';
 import { Activity } from '@/types';
 import { fetchActivities, addActivity, fetchCategories, fetchPaymentMethods } from '@/lib/api';
-import { Wallet, Plus, Calendar, ChevronRight, RotateCcw, Moon, Sun, Laptop, Loader2, User as UserIcon } from 'lucide-react';
+import { Wallet, Plus, Calendar, ChevronRight, RotateCcw, Moon, Sun, Laptop, Loader2, User as UserIcon, Filter, X } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/components/UserContext';
 import Link from 'next/link';
@@ -26,6 +27,11 @@ export default function Dashboard() {
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
     const [availablePaymentMethods, setAvailablePaymentMethods] = useState<string[]>([]);
     const [showAll, setShowAll] = useState(false);
+
+    // Filters
+    const [showFilterMenu, setShowFilterMenu] = useState(false);
+    const [filterCategory, setFilterCategory] = useState('');
+    const [filterPaymentMethod, setFilterPaymentMethod] = useState('');
 
     const { theme, setTheme } = useTheme();
     const { user, loading: loadingUser } = useUser();
@@ -110,7 +116,7 @@ export default function Dashboard() {
             const activityData = {
                 date: newTransaction.date,
                 transaction: newTransaction.transaction,
-                amount: newTransaction.amount,
+                amount: newTransaction.transaction_flow === 'Outflow' ? -Math.abs(newTransaction.amount) : Math.abs(newTransaction.amount),
                 category: newTransaction.category,
                 transaction_flow: newTransaction.transaction_flow,
                 payment_method: newTransaction.payment_method,
@@ -149,6 +155,11 @@ export default function Dashboard() {
 
     // Recent Transactions (Top 10 sorted by date desc)
     const recentTransactions = [...activities]
+        .filter(a => {
+            if (filterCategory && a.category !== filterCategory) return false;
+            if (filterPaymentMethod && a.payment_method !== filterPaymentMethod) return false;
+            return true;
+        })
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, showAll ? undefined : 10);
 
@@ -203,13 +214,67 @@ export default function Dashboard() {
             <section className="mb-8">
                 <div className="flex justify-between items-center mb-3">
                     <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Recent Transactions</h2>
-                    <button
-                        onClick={() => setShowAll(!showAll)}
-                        className="text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center"
-                    >
-                        {showAll ? 'Show Less' : 'View All'} <ChevronRight size={16} className={`transition-transform ${showAll ? 'rotate-90' : ''}`} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowFilterMenu(!showFilterMenu)}
+                            className={`text-sm font-medium flex items-center gap-1 transition-colors ${filterCategory || filterPaymentMethod ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}
+                        >
+                            <Filter size={16} />
+                        </button>
+                        <button
+                            onClick={() => setShowAll(!showAll)}
+                            className="text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center"
+                        >
+                            {showAll ? 'Show Less' : 'View All'} <ChevronRight size={16} className={`transition-transform ${showAll ? 'rotate-90' : ''}`} />
+                        </button>
+                    </div>
                 </div>
+
+                {/* Filter Menu */}
+                {showFilterMenu && (
+                    <div className="mb-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 animate-in slide-in-from-top-2 duration-200">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Filter Transactions</h3>
+                            <button onClick={() => setShowFilterMenu(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={16} /></button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
+                                <select
+                                    value={filterCategory}
+                                    onChange={(e) => setFilterCategory(e.target.value)}
+                                    className="w-full p-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-gray-50 dark:bg-gray-700 dark:text-white outline-none focus:border-blue-500"
+                                >
+                                    <option value="">All Categories</option>
+                                    {availableCategories.map(c => (
+                                        <option key={c} value={c}>{capitalize(c)}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Method</label>
+                                <select
+                                    value={filterPaymentMethod}
+                                    onChange={(e) => setFilterPaymentMethod(e.target.value)}
+                                    className="w-full p-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-gray-50 dark:bg-gray-700 dark:text-white outline-none focus:border-blue-500"
+                                >
+                                    <option value="">All Methods</option>
+                                    {availablePaymentMethods.map(pm => (
+                                        <option key={pm} value={pm}>{capitalize(pm)}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        {(filterCategory || filterPaymentMethod) && (
+                            <button
+                                onClick={() => { setFilterCategory(''); setFilterPaymentMethod(''); }}
+                                className="mt-3 text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1"
+                            >
+                                <X size={12} /> Clear Filters
+                            </button>
+                        )}
+                    </div>
+                )}
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors duration-300">
                     {loading ? (
                         <div className="p-8 text-center text-gray-400">Loading transactions...</div>
@@ -221,7 +286,7 @@ export default function Dashboard() {
                                     <div>
                                         <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{activity.transaction}</p>
                                         <div className="flex items-center gap-2 mt-0.5">
-                                            <span className="text-xs text-gray-400 dark:text-gray-500">{new Date(activity.date).toLocaleDateString()}</span>
+                                            <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(activity.date)}</span>
                                             <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-md font-medium">{capitalize(activity.category)}</span>
                                             <span className="text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md font-medium">{capitalize(activity.payment_method)}</span>
                                         </div>

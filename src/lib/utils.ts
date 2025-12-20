@@ -78,3 +78,12 @@ export const capitalize = (str: string) => {
 export const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
+
+export const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    // Create date focusing on YYYY-MM-DD components to treat as local date
+    const [year, month, day] = dateString.split('-').map(Number);
+    // Note: Month is 0-indexed in JS Date
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString();
+};
