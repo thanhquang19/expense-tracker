@@ -465,7 +465,16 @@ export default function Dashboard() {
                 <h2 className="text-lg font-semibold mb-3 text-gray-700 dark:text-gray-200">Accounts</h2>
                 <div className="grid grid-rows-2 grid-flow-col gap-3 overflow-x-auto pb-4 scrollbar-hide">
                     {availablePaymentMethods.map((pm) => (
-                        <div key={pm} className="w-[140px] p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-between h-24 shrink-0 transition-colors duration-300">
+                        <div
+                            key={pm}
+                            onClick={() => {
+                                setFilterPaymentMethod(pm);
+                                setFilterStartDate(startDate);
+                                setFilterEndDate(endDate);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="w-[140px] p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-between h-24 shrink-0 transition-all duration-300 cursor-pointer hover:scale-[0.98] hover:shadow-md"
+                        >
                             <div className="flex items-start justify-between">
                                 <div className="p-1.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
                                     <Wallet size={16} />
