@@ -436,7 +436,16 @@ export default function Dashboard() {
                         <h3 className="text-xs font-semibold text-gray-400 uppercase">Category Breakdown</h3>
                         {categorySummary.length > 0 ? (
                             categorySummary.map((item) => (
-                                <div key={item.category} className="flex justify-between items-center">
+                                <div
+                                    key={item.category}
+                                    className="flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 p-1 rounded-lg transition-colors"
+                                    onClick={() => {
+                                        setFilterCategory(item.category);
+                                        setFilterStartDate(startDate);
+                                        setFilterEndDate(endDate);
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                >
                                     <div className="flex items-center gap-2">
                                         <div className={`w-2 h-2 rounded-full ${item.amount > 0 ? 'bg-green-500' : 'bg-red-400'}`}></div>
                                         <span className="text-sm text-gray-600 dark:text-gray-300">{capitalize(item.category)}</span>
