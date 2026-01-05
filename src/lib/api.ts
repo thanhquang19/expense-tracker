@@ -50,6 +50,42 @@ export const addActivity = async (activity: Omit<Activity, 'id' | 'created_at'>)
     return data as Activity;
 };
 
+export const updateActivity = async (id: number, activity: Partial<Omit<Activity, 'id' | 'created_at'>>): Promise<Activity> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { data, error } = await supabase
+        .from('activity')
+        .update(activity)
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating activity:', error);
+        throw error;
+    }
+
+    return data as Activity;
+};
+
+export const deleteActivity = async (id: number): Promise<void> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { error } = await supabase
+        .from('activity')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting activity:', error);
+        throw error;
+    }
+};
+
 export const fetchCategories = async (): Promise<string[]> => {
     if (!isSupabaseConfigured()) {
         return [];

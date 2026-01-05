@@ -10,8 +10,8 @@ import {
     formatDate
 } from '@/lib/utils';
 import { Activity } from '@/types';
-import { fetchActivities, addActivity, fetchCategories, fetchPaymentMethods } from '@/lib/api';
-import { Wallet, Plus, Calendar, ChevronRight, RotateCcw, Moon, Sun, Laptop, Loader2, User as UserIcon, Filter, X } from 'lucide-react';
+import { fetchActivities, addActivity, updateActivity, deleteActivity, fetchCategories, fetchPaymentMethods } from '@/lib/api';
+import { Wallet, Plus, Calendar, ChevronRight, RotateCcw, Moon, Sun, Laptop, Loader2, User as UserIcon, Filter, X, Trash2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/components/UserContext';
 import Link from 'next/link';
@@ -32,6 +32,8 @@ export default function Dashboard() {
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [filterCategory, setFilterCategory] = useState('');
     const [filterPaymentMethod, setFilterPaymentMethod] = useState('');
+    const [filterStartDate, setFilterStartDate] = useState('');
+    const [filterEndDate, setFilterEndDate] = useState('');
 
     const { theme, setTheme } = useTheme();
     const { user, loading: loadingUser } = useUser();
@@ -47,6 +49,7 @@ export default function Dashboard() {
 
     const [showForm, setShowForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [editingActivityId, setEditingActivityId] = useState<number | null>(null);
     const [newTransaction, setNewTransaction] = useState({
         date: new Date().toISOString().split('T')[0],
         transaction: '',
@@ -110,7 +113,7 @@ export default function Dashboard() {
 
     }, [activities, startDate, endDate]);
 
-    const handleAddTransaction = async () => {
+    const handleSaveTransaction = async () => {
         setSubmitting(true);
         try {
             const activityData = {
@@ -120,20 +123,27 @@ export default function Dashboard() {
                 category: newTransaction.category,
                 transaction_flow: newTransaction.transaction_flow,
                 payment_method: newTransaction.payment_method,
-                user_id: user!.id // User is guaranteed non-null here due to guard
+                user_id: user!.id
             };
 
-            const savedActivity = await addActivity(activityData);
-            setActivities([savedActivity, ...activities]);
+            if (editingActivityId) {
+                const updatedActivity = await updateActivity(editingActivityId, activityData);
+                setActivities(activities.map(a => a.id === editingActivityId ? updatedActivity : a));
+            } else {
+                const savedActivity = await addActivity(activityData);
+                setActivities([savedActivity, ...activities]);
+            }
+
             setShowForm(false);
+            setEditingActivityId(null);
             // Reset form but keep date and defaults
             setNewTransaction(prev => ({
                 ...prev,
                 transaction: '',
                 amount: 0,
                 transaction_flow: 'Outflow',
-                category: availableCategories[0] || '', // Reset to first available category
-                payment_method: availablePaymentMethods[0] || '' // Reset to first available payment method
+                category: availableCategories[0] || '',
+                payment_method: availablePaymentMethods[0] || ''
             }));
         } catch (error) {
             console.error('Failed to save transaction', error);
@@ -141,6 +151,33 @@ export default function Dashboard() {
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const handleDeleteTransaction = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this transaction?')) return;
+
+        try {
+            await deleteActivity(id);
+            setActivities(activities.filter(a => a.id !== id));
+            setShowForm(false);
+            setEditingActivityId(null);
+        } catch (error) {
+            console.error('Failed to delete transaction', error);
+            alert('Failed to delete transaction.');
+        }
+    };
+
+    const handleEditClick = (activity: Activity) => {
+        setEditingActivityId(activity.id);
+        setNewTransaction({
+            date: activity.date,
+            transaction: activity.transaction,
+            amount: Math.abs(activity.amount),
+            transaction_flow: activity.transaction_flow,
+            payment_method: activity.payment_method,
+            category: activity.category
+        });
+        setShowForm(true);
     };
 
     const resetFilters = () => {
@@ -158,6 +195,8 @@ export default function Dashboard() {
         .filter(a => {
             if (filterCategory && a.category !== filterCategory) return false;
             if (filterPaymentMethod && a.payment_method !== filterPaymentMethod) return false;
+            if (filterStartDate && a.date < filterStartDate) return false;
+            if (filterEndDate && a.date > filterEndDate) return false;
             return true;
         })
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -202,7 +241,18 @@ export default function Dashboard() {
                     </div>
 
                     <button
-                        onClick={() => setShowForm(true)}
+                        onClick={() => {
+                            setEditingActivityId(null);
+                            setNewTransaction({
+                                date: new Date().toISOString().split('T')[0],
+                                transaction: '',
+                                amount: 0,
+                                transaction_flow: 'Outflow',
+                                payment_method: availablePaymentMethods[0] || '',
+                                category: availableCategories[0] || ''
+                            });
+                            setShowForm(true);
+                        }}
                         className="p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition active:scale-95"
                     >
                         <Plus size={24} />
@@ -217,7 +267,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setShowFilterMenu(!showFilterMenu)}
-                            className={`text-sm font-medium flex items-center gap-1 transition-colors ${filterCategory || filterPaymentMethod ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}
+                            className={`text-sm font-medium flex items-center gap-1 transition-colors ${filterCategory || filterPaymentMethod || filterStartDate || filterEndDate ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}
                         >
                             <Filter size={16} />
                         </button>
@@ -264,10 +314,33 @@ export default function Dashboard() {
                                     ))}
                                 </select>
                             </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">From</label>
+                                <input
+                                    type="date"
+                                    value={filterStartDate}
+                                    onChange={(e) => setFilterStartDate(e.target.value)}
+                                    className="w-full p-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-gray-50 dark:bg-gray-700 dark:text-white outline-none focus:border-blue-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">To</label>
+                                <input
+                                    type="date"
+                                    value={filterEndDate}
+                                    onChange={(e) => setFilterEndDate(e.target.value)}
+                                    className="w-full p-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-gray-50 dark:bg-gray-700 dark:text-white outline-none focus:border-blue-500"
+                                />
+                            </div>
                         </div>
-                        {(filterCategory || filterPaymentMethod) && (
+                        {(filterCategory || filterPaymentMethod || filterStartDate || filterEndDate) && (
                             <button
-                                onClick={() => { setFilterCategory(''); setFilterPaymentMethod(''); }}
+                                onClick={() => {
+                                    setFilterCategory('');
+                                    setFilterPaymentMethod('');
+                                    setFilterStartDate('');
+                                    setFilterEndDate('');
+                                }}
                                 className="mt-3 text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1"
                             >
                                 <X size={12} /> Clear Filters
@@ -275,12 +348,17 @@ export default function Dashboard() {
                         )}
                     </div>
                 )}
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors duration-300">
+
+                <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors duration-300 ${showAll ? 'max-h-[400px] overflow-y-auto' : 'overflow-hidden'}`}>
                     {loading ? (
                         <div className="p-8 text-center text-gray-400">Loading transactions...</div>
                     ) : recentTransactions.length > 0 ? (
                         recentTransactions.map((activity, index) => (
-                            <div key={activity.id} className={`flex justify-between items-center p-3 ${index !== recentTransactions.length - 1 ? 'border-b border-gray-50 dark:border-gray-700' : ''}`}>
+                            <div
+                                key={activity.id}
+                                onClick={() => handleEditClick(activity)}
+                                className={`flex justify-between items-center p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${index !== recentTransactions.length - 1 ? 'border-b border-gray-50 dark:border-gray-700' : ''}`}
+                            >
                                 <div className="flex items-center gap-3">
                                     {/* Icon Removed as requested */}
                                     <div>
@@ -301,10 +379,10 @@ export default function Dashboard() {
                         <div className="p-8 text-center text-gray-400">No transactions yet</div>
                     )}
                 </div>
-            </section>
+            </section >
 
             {/* Date Filter */}
-            <section className="mb-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors duration-300">
+            < section className="mb-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors duration-300" >
                 <div className="flex justify-between items-center mb-2">
                     <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm font-medium">
                         <Calendar size={16} />
@@ -331,16 +409,22 @@ export default function Dashboard() {
                         className="flex-1 p-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-gray-50 dark:bg-gray-700 dark:text-white outline-none focus:border-blue-500 transition-colors"
                     />
                 </div>
-            </section>
+            </section >
 
             {/* Period Summary (By Category) */}
-            <section className="mb-8">
+            < section className="mb-8" >
                 <h2 className="text-lg font-semibold mb-3 text-gray-700 dark:text-gray-200">Period Summary</h2>
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 transition-colors duration-300">
                     <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-50 dark:border-gray-700">
                         <div>
                             <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Beginning</p>
                             <p className="text-lg font-bold text-gray-800 dark:text-white">{formatCurrency(summary.beginningBalance)}</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Net Amount</p>
+                            <p className={`text-lg font-bold ${(summary.endingBalance - summary.beginningBalance) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {formatCurrency(summary.endingBalance - summary.beginningBalance)}
+                            </p>
                         </div>
                         <div className="text-right">
                             <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Ending</p>
@@ -365,10 +449,10 @@ export default function Dashboard() {
                         )}
                     </div>
                 </div>
-            </section>
+            </section >
 
             {/* Account Cards (Moved to Bottom) */}
-            <section className="mb-8">
+            < section className="mb-8" >
                 <h2 className="text-lg font-semibold mb-3 text-gray-700 dark:text-gray-200">Accounts</h2>
                 <div className="grid grid-rows-2 grid-flow-col gap-3 overflow-x-auto pb-4 scrollbar-hide">
                     {availablePaymentMethods.map((pm) => (
@@ -381,127 +465,139 @@ export default function Dashboard() {
                             </div>
                             <div>
                                 <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate mb-0.5">{capitalize(pm)}</p>
-                                <p className="text-base font-bold text-gray-800 dark:text-white">
-                                    {formatCurrency(balances[pm] || 0)}
+                                <p className={`text-base font-bold ${balances[pm] < 0 ? 'text-red-600 dark:text-red-400' : balances[pm] > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-800 dark:text-white'}`}>
+                                    {formatCurrency(Math.abs(balances[pm] || 0))}
                                 </p>
                             </div>
                         </div>
                     ))}
                 </div>
-            </section>
+            </section >
 
             {/* Transaction Form Modal */}
-            {showForm && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom duration-200 transition-colors">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add Transaction</h2>
-                            <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
-                        </div>
-
-                        <div className="space-y-5">
-                            {/* Flow Toggle */}
-                            <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-                                <button
-                                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${newTransaction.transaction_flow === 'Outflow' ? 'bg-white dark:bg-gray-600 text-red-600 dark:text-red-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-                                    onClick={() => setNewTransaction({ ...newTransaction, transaction_flow: 'Outflow' })}
-                                >
-                                    Out-flow
-                                </button>
-                                <button
-                                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${newTransaction.transaction_flow === 'Inflow' ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-                                    onClick={() => setNewTransaction({ ...newTransaction, transaction_flow: 'Inflow' })}
-                                >
-                                    In-flow
-                                </button>
+            {
+                showForm && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+                        <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom duration-200 transition-colors">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-xl font-bold text-gray-800 dark:text-white">{editingActivityId ? 'Edit Transaction' : 'Add Transaction'}</h2>
+                                <div className="flex items-center gap-3">
+                                    {editingActivityId && (
+                                        <button
+                                            onClick={() => handleDeleteTransaction(editingActivityId)}
+                                            className="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-1"
+                                        >
+                                            <Trash2 size={20} />
+                                        </button>
+                                    )}
+                                    <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl">✕</button>
+                                </div>
                             </div>
 
-                            {/* Amount & Date Row */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount</label>
-                                    <div className="relative">
-                                        <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-lg font-bold ${newTransaction.transaction_flow === 'Inflow' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>$</span>
+                            <div className="space-y-5">
+                                {/* Flow Toggle */}
+                                <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+                                    <button
+                                        className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${newTransaction.transaction_flow === 'Outflow' ? 'bg-white dark:bg-gray-600 text-red-600 dark:text-red-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                                        onClick={() => setNewTransaction({ ...newTransaction, transaction_flow: 'Outflow' })}
+                                    >
+                                        Out-flow
+                                    </button>
+                                    <button
+                                        className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${newTransaction.transaction_flow === 'Inflow' ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                                        onClick={() => setNewTransaction({ ...newTransaction, transaction_flow: 'Inflow' })}
+                                    >
+                                        In-flow
+                                    </button>
+                                </div>
+
+                                {/* Amount & Date Row */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount</label>
+                                        <div className="relative">
+                                            <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-lg font-bold ${newTransaction.transaction_flow === 'Inflow' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>$</span>
+                                            <input
+                                                type="number"
+                                                className={`w-full pl-8 p-3 border rounded-xl text-lg font-bold outline-none focus:ring-2 bg-white dark:bg-gray-700 ${newTransaction.transaction_flow === 'Inflow' ? 'text-green-600 dark:text-green-400 focus:ring-green-100 border-green-200 dark:border-green-800' : 'text-red-600 dark:text-red-400 focus:ring-red-100 border-red-200 dark:border-red-800'}`}
+                                                value={newTransaction.amount || ''}
+                                                onChange={(e) => setNewTransaction({ ...newTransaction, amount: Number(e.target.value) })}
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Date</label>
                                         <input
-                                            type="number"
-                                            className={`w-full pl-8 p-3 border rounded-xl text-lg font-bold outline-none focus:ring-2 bg-white dark:bg-gray-700 ${newTransaction.transaction_flow === 'Inflow' ? 'text-green-600 dark:text-green-400 focus:ring-green-100 border-green-200 dark:border-green-800' : 'text-red-600 dark:text-red-400 focus:ring-red-100 border-red-200 dark:border-red-800'}`}
-                                            value={newTransaction.amount || ''}
-                                            onChange={(e) => setNewTransaction({ ...newTransaction, amount: Number(e.target.value) })}
-                                            placeholder="0.00"
+                                            type="date"
+                                            className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 h-[54px] bg-white dark:bg-gray-700 dark:text-white"
+                                            value={newTransaction.date}
+                                            onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
                                         />
                                     </div>
                                 </div>
+
+                                {/* Description Row */}
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Date</label>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Description</label>
                                     <input
-                                        type="date"
-                                        className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 h-[54px] bg-white dark:bg-gray-700 dark:text-white"
-                                        value={newTransaction.date}
-                                        onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
+                                        type="text"
+                                        className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white"
+                                        placeholder="e.g. Lunch"
+                                        value={newTransaction.transaction}
+                                        onChange={(e) => setNewTransaction({ ...newTransaction, transaction: e.target.value })}
                                     />
                                 </div>
-                            </div>
 
-                            {/* Description Row */}
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Description</label>
-                                <input
-                                    type="text"
-                                    className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white"
-                                    placeholder="e.g. Lunch"
-                                    value={newTransaction.transaction}
-                                    onChange={(e) => setNewTransaction({ ...newTransaction, transaction: e.target.value })}
-                                />
-                            </div>
+                                {/* Category */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
+                                    <select
+                                        className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white"
+                                        value={newTransaction.category}
+                                        onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
+                                    >
+                                        {availableCategories.map(c => (
+                                            <option key={c} value={c}>{capitalize(c)}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                            {/* Category */}
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
-                                <select
-                                    className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white"
-                                    value={newTransaction.category}
-                                    onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
-                                >
-                                    {availableCategories.map(c => (
-                                        <option key={c} value={c}>{capitalize(c)}</option>
-                                    ))}
-                                </select>
-                            </div>
+                                {/* Payment Method */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Method</label>
+                                    <select
+                                        className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white"
+                                        value={newTransaction.payment_method}
+                                        onChange={(e) => setNewTransaction({ ...newTransaction, payment_method: e.target.value })}
+                                    >
+                                        {availablePaymentMethods.map(pm => (
+                                            <option key={pm} value={pm}>{capitalize(pm)}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                            {/* Payment Method */}
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Method</label>
-                                <select
-                                    className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white"
-                                    value={newTransaction.payment_method}
-                                    onChange={(e) => setNewTransaction({ ...newTransaction, payment_method: e.target.value })}
-                                >
-                                    {availablePaymentMethods.map(pm => (
-                                        <option key={pm} value={pm}>{capitalize(pm)}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="pt-2">
-                                <button
-                                    onClick={handleAddTransaction}
-                                    disabled={submitting}
-                                    className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
-                                >
-                                    {submitting ? (
-                                        <>
-                                            <Loader2 className="animate-spin" size={20} />
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        'Save Transaction'
-                                    )}
-                                </button>
+                                <div className="pt-2">
+                                    <button
+                                        onClick={handleSaveTransaction}
+                                        disabled={submitting}
+                                        className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                                    >
+                                        {submitting ? (
+                                            <>
+                                                <Loader2 className="animate-spin" size={20} />
+                                                Saving...
+                                            </>
+                                        ) : (
+                                            editingActivityId ? 'Update Transaction' : 'Save Transaction'
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }
