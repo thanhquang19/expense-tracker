@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     getBalances,
     getPeriodSummary,
@@ -189,6 +189,20 @@ export default function Dashboard() {
     };
 
 
+    // Calculate running balances for all activities
+    const runningBalances = useMemo(() => {
+        const balances: Record<string, number> = {};
+        const runBalances: Record<number, number> = {};
+
+        // Process from oldest to newest to build up the balance history
+        for (let i = activities.length - 1; i >= 0; i--) {
+            const activity = activities[i];
+            const pm = activity.payment_method;
+            balances[pm] = (balances[pm] || 0) + activity.amount;
+            runBalances[activity.id] = balances[pm];
+        }
+        return runBalances;
+    }, [activities]);
 
     // Recent Transactions (Top 10 sorted by date desc)
     const recentTransactions = [...activities]
@@ -370,9 +384,14 @@ export default function Dashboard() {
                                         </div>
                                     </div>
                                 </div>
-                                <span className={`text-sm font-bold ${activity.amount > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                    {formatCurrency(activity.amount)}
-                                </span>
+                                <div className="text-right">
+                                    <p className={`text-sm font-bold ${activity.amount > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                        {formatCurrency(activity.amount)}
+                                    </p>
+                                    <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
+                                        {formatCurrency(runningBalances[activity.id] || 0)}
+                                    </p>
+                                </div>
                             </div>
                         ))
                     ) : (
