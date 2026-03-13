@@ -15,7 +15,7 @@ export const fetchActivities = async (userId?: number): Promise<Activity[]> => {
         .from('activity')
         .select('*')
         .order('date', { ascending: false })
-        .limit(10000000);
+        .limit(5000000);
 
     if (userId) {
         query = query.eq('user_id', userId);
