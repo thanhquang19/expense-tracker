@@ -14,7 +14,8 @@ export const fetchActivities = async (userId?: number): Promise<Activity[]> => {
     let query = supabase
         .from('activity')
         .select('*')
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .limit(10000000);
 
     if (userId) {
         query = query.eq('user_id', userId);
