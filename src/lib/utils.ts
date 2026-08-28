@@ -1,10 +1,13 @@
 import { Activity } from '@/types';
 
-export const getBalances = (activities: Activity[]) => {
+// Balance per payment method; pass asOfDate to only include activity up to (and including) that date
+export const getBalances = (activities: Activity[], asOfDate?: Date) => {
     const balances: Record<string, number> = {};
 
     activities.forEach(activity => {
-        const { payment_method, amount, transaction_flow } = activity;
+        if (asOfDate && parseLocalDate(activity.date) > asOfDate) return;
+
+        const { payment_method, amount } = activity;
         if (balances[payment_method] === undefined) {
             balances[payment_method] = 0;
         }
@@ -75,6 +78,62 @@ export const capitalize = (str: string) => {
     return str.charAt(0).toUpperCase() + str.slice(1);
 };
 
+// Parses a YYYY-MM-DD string as a local date (avoids the UTC shift `new Date(str)` applies)
+export const parseLocalDate = (dateString: string) => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+};
+
+// Total spend per expense category across all activities, sorted biggest-first
+export const getExpenseCategoryTotals = (activities: Activity[]) => {
+    const totals: Record<string, number> = {};
+    activities.forEach(a => {
+        if (a.amount >= 0) return;
+        totals[a.category] = (totals[a.category] || 0) + Math.abs(a.amount);
+    });
+    return Object.entries(totals)
+        .map(([category, amount]) => ({ category, amount }))
+        .sort((a, b) => b.amount - a.amount);
+};
+
+// Monthly spend per selected category between startDate and endDate (inclusive)
+export const getCategoryTrend = (activities: Activity[], startDate: Date, endDate: Date, categories: string[]) => {
+    const buckets: { year: number; month: number; label: string }[] = [];
+    const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    const lastBucket = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+    while (cursor <= lastBucket) {
+        buckets.push({
+            year: cursor.getFullYear(),
+            month: cursor.getMonth(),
+            label: cursor.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+        });
+        cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    const rangeStart = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const rangeEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+    const expenses = activities.filter(a => {
+        if (a.amount >= 0 || !categories.includes(a.category)) return false;
+        const d = parseLocalDate(a.date);
+        return d >= rangeStart && d <= rangeEnd;
+    });
+
+    const data = buckets.map(bucket => {
+        const row: Record<string, number | string> = { month: bucket.label };
+        categories.forEach(cat => { row[cat] = 0; });
+        return row;
+    });
+
+    expenses.forEach(a => {
+        const d = parseLocalDate(a.date);
+        const bucketIndex = buckets.findIndex(b => b.year === d.getFullYear() && b.month === d.getMonth());
+        if (bucketIndex === -1) return;
+        (data[bucketIndex][a.category] as number) += Math.abs(a.amount);
+    });
+
+    return { data };
+};
+
 export const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
@@ -85,5 +144,14 @@ export const formatDate = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);
     // Note: Month is 0-indexed in JS Date
     const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString();
+    // Pin locale/format so display doesn't vary by browser locale
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+};
+
+// Formats a Date as YYYY-MM-DD using local time (avoids toISOString's UTC shift)
+export const toLocalDateString = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 };
