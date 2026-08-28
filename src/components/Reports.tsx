@@ -236,7 +236,7 @@ export default function Reports() {
                                         </Pie>
                                         <Tooltip
                                             contentStyle={tooltipStyle}
-                                            formatter={(value: number) => formatCurrency(value)}
+                                            formatter={(value) => formatCurrency(Number(value))}
                                         />
                                     </PieChart>
                                 </ResponsiveContainer>
@@ -351,7 +351,7 @@ export default function Reports() {
                                     <YAxis tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={40} />
                                     <Tooltip
                                         contentStyle={tooltipStyle}
-                                        formatter={(value: number) => formatCurrency(value)}
+                                        formatter={(value) => formatCurrency(Number(value))}
                                     />
                                     <Legend wrapperStyle={{ fontSize: '12px' }} />
                                     {(selectedTrendCategories || []).map((cat) => (
