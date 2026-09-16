@@ -25,4 +25,23 @@ export interface Activity {
     payment_method: string;
     created_at: string;
     user_id: number;
+    recurring_id?: number | null;
+}
+
+export type RecurringFrequency = 'weekly' | 'biweekly' | 'monthly' | 'yearly';
+
+export interface RecurringTransaction {
+    id: number;
+    user_id: number;
+    transaction: string;
+    amount: number;
+    category: string;
+    transaction_flow: 'Inflow' | 'Outflow';
+    payment_method: string;
+    frequency: RecurringFrequency;
+    start_date: string;
+    next_run_date: string;
+    end_date: string | null;
+    is_active: boolean;
+    created_at: string;
 }

@@ -12,8 +12,8 @@ import {
     parseLocalDate
 } from '@/lib/utils';
 import { Activity } from '@/types';
-import { fetchActivities, addActivity, updateActivity, deleteActivity, fetchCategories, fetchPaymentMethods } from '@/lib/api';
-import { Wallet, Plus, Calendar, ChevronRight, RotateCcw, Moon, Sun, Laptop, User as UserIcon, Filter, X } from 'lucide-react';
+import { fetchActivities, addActivity, updateActivity, deleteActivity, fetchCategories, fetchPaymentMethods, processDueRecurringTransactions } from '@/lib/api';
+import { Wallet, Plus, Calendar, ChevronRight, RotateCcw, Moon, Sun, Laptop, User as UserIcon, Filter, X, Repeat } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/components/UserContext';
 import Link from 'next/link';
@@ -61,6 +61,13 @@ export default function Dashboard() {
         if (!user) return;
         try {
             setLoading(true);
+            // Backfill any recurring transactions that came due while the app was closed
+            try {
+                await processDueRecurringTransactions(user.id);
+            } catch (error) {
+                console.error('Failed to process recurring transactions', error);
+            }
+
             const [activitiesData, categoriesData, paymentMethodsData] = await Promise.all([
                 fetchActivities(user.id),
                 fetchCategories(),
@@ -320,7 +327,12 @@ export default function Dashboard() {
                                 <div className="flex items-center gap-3">
                                     {/* Icon Removed as requested */}
                                     <div>
-                                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{activity.transaction}</p>
+                                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                                            {activity.transaction}
+                                            {activity.recurring_id && (
+                                                <Repeat size={12} className="text-gray-400 dark:text-gray-500 shrink-0" />
+                                            )}
+                                        </p>
                                         <div className="flex items-center gap-2 mt-0.5">
                                             <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(activity.date)}</span>
                                             <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-md font-medium">{capitalize(activity.category)}</span>

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
-import { Activity } from '@/types';
+import { Activity, RecurringTransaction } from '@/types';
+import { parseLocalDate, toLocalDateString, getNextOccurrence, getPeriodStart, getEffectiveDate } from './utils';
 
 const isSupabaseConfigured = () => {
     return !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -128,3 +129,214 @@ export const fetchPaymentMethods = async (userId?: number): Promise<string[]> =>
 
     return data.map((pm: any) => pm.payment_method);
 };
+
+export const fetchRecurringTransactions = async (userId: number): Promise<RecurringTransaction[]> => {
+    if (!isSupabaseConfigured()) {
+        return [];
+    }
+
+    const { data, error } = await supabase
+        .from('recurring_transaction')
+        .select('*')
+        .eq('user_id', userId)
+        .order('next_run_date');
+
+    if (error) {
+        console.error('Error fetching recurring transactions:', error);
+        throw error;
+    }
+
+    const rows = (data || []) as RecurringTransaction[];
+
+    // Keep next_run_date aligned to its period start even for rules that aren't due yet,
+    // so the displayed "Next" date is always correct instead of only updating once fired.
+    const misaligned = rows
+        .filter(rt => rt.is_active)
+        .map(rt => ({ rt, aligned: toLocalDateString(getPeriodStart(parseLocalDate(rt.next_run_date), rt.frequency)) }))
+        .filter(({ rt, aligned }) => aligned !== rt.next_run_date);
+
+    if (misaligned.length > 0) {
+        await Promise.all(
+            misaligned.map(({ rt, aligned }) =>
+                supabase.from('recurring_transaction').update({ next_run_date: aligned }).eq('id', rt.id)
+            )
+        );
+        misaligned.forEach(({ rt, aligned }) => { rt.next_run_date = aligned; });
+    }
+
+    return rows;
+};
+
+export const addRecurringTransaction = async (
+    recurring: Omit<RecurringTransaction, 'id' | 'created_at' | 'next_run_date'>
+): Promise<RecurringTransaction> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    // First occurrence is dated to the start of its period (e.g. the 1st of the month
+    // for monthly rules), not whatever day-of-month the rule happened to be created on.
+    const nextRunDate = toLocalDateString(getPeriodStart(parseLocalDate(recurring.start_date), recurring.frequency));
+
+    const { data, error } = await supabase
+        .from('recurring_transaction')
+        .insert([{ ...recurring, next_run_date: nextRunDate }])
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error adding recurring transaction:', error);
+        throw error;
+    }
+
+    return data as RecurringTransaction;
+};
+
+export const updateRecurringTransaction = async (
+    id: number,
+    recurring: Partial<Omit<RecurringTransaction, 'id' | 'created_at'>>
+): Promise<RecurringTransaction> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { data, error } = await supabase
+        .from('recurring_transaction')
+        .update(recurring)
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating recurring transaction:', error);
+        throw error;
+    }
+
+    return data as RecurringTransaction;
+};
+
+export const deleteRecurringTransaction = async (id: number): Promise<void> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { error } = await supabase
+        .from('recurring_transaction')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting recurring transaction:', error);
+        throw error;
+    }
+};
+
+// Caps how many missed periods are backfilled in one pass (recovers gradually if the app
+// hasn't been opened in a very long time, instead of generating years of activity at once).
+const MAX_CATCHUP_OCCURRENCES = 24;
+
+// Generates activity rows for every active recurring transaction whose next_run_date has
+// arrived, then advances each rule to its next period. Intended to be called on app load
+// so due transactions appear automatically without a dedicated server/cron process.
+export const processDueRecurringTransactions = async (userId: number): Promise<Activity[]> => {
+    if (!isSupabaseConfigured()) {
+        return [];
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const { data: dueRecurring, error } = await supabase
+        .from('recurring_transaction')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .lte('next_run_date', toLocalDateString(today));
+
+    if (error) {
+        console.error('Error fetching due recurring transactions:', error);
+        throw error;
+    }
+
+    const recurringList = (dueRecurring || []) as RecurringTransaction[];
+    if (recurringList.length === 0) {
+        return [];
+    }
+
+    const insertedActivities: Activity[] = [];
+
+    for (const rt of recurringList) {
+        // The anchor preserves the original day-of-month/weekday (e.g. rent due on the
+        // 15th) so it can be reapplied to whichever period is currently being entered.
+        const anchorDate = parseLocalDate(rt.start_date);
+        // Re-snap to the period start in case this rule's next_run_date predates the
+        // period-alignment fix (or drifted for any other reason). This drives *when* the
+        // rule is entered (e.g. the 1st of the month), separate from the effective date.
+        let cursor = getPeriodStart(parseLocalDate(rt.next_run_date), rt.frequency);
+        const endLimit = rt.end_date ? parseLocalDate(rt.end_date) : null;
+        const occurrences: { effectiveDate: string }[] = [];
+        let deactivated = false;
+        let count = 0;
+
+        while (cursor <= today && count < MAX_CATCHUP_OCCURRENCES) {
+            const effectiveDate = getEffectiveDate(cursor, anchorDate, rt.frequency);
+            if (endLimit && effectiveDate > endLimit) {
+                deactivated = true;
+                break;
+            }
+
+            occurrences.push({ effectiveDate: toLocalDateString(effectiveDate) });
+            cursor = getNextOccurrence(cursor, rt.frequency);
+            count++;
+        }
+
+        if (occurrences.length === 0 && !deactivated) {
+            continue;
+        }
+
+        // Optimistic lock: only advance/insert if next_run_date still matches what we just
+        // read. If a concurrent call (e.g. a duplicate effect invocation) already advanced
+        // it, this update matches zero rows and we skip, avoiding double-generated activity.
+        const { data: claimed, error: claimError } = await supabase
+            .from('recurring_transaction')
+            .update({ next_run_date: toLocalDateString(cursor), is_active: !deactivated })
+            .eq('id', rt.id)
+            .eq('next_run_date', rt.next_run_date)
+            .select();
+
+        if (claimError) {
+            console.error('Error advancing recurring transaction schedule:', claimError);
+            continue;
+        }
+        if (!claimed || claimed.length === 0) {
+            continue;
+        }
+
+        if (occurrences.length > 0) {
+            const activitiesForRule = occurrences.map(({ effectiveDate }) => ({
+                date: effectiveDate,
+                transaction: rt.transaction,
+                amount: rt.transaction_flow === 'Outflow' ? -Math.abs(rt.amount) : Math.abs(rt.amount),
+                category: rt.category,
+                transaction_flow: rt.transaction_flow,
+                payment_method: rt.payment_method,
+                user_id: userId,
+                recurring_id: rt.id
+            }));
+
+            const { data: inserted, error: insertError } = await supabase
+                .from('activity')
+                .insert(activitiesForRule)
+                .select();
+
+            if (insertError) {
+                console.error('Error auto-generating recurring activities:', insertError);
+                continue;
+            }
+            insertedActivities.push(...(inserted as Activity[]));
+        }
+    }
+
+    return insertedActivities;
+};
+

@@ -1,4 +1,4 @@
-import { Activity } from '@/types';
+import { Activity, RecurringFrequency } from '@/types';
 
 // Balance per payment method; pass asOfDate to only include activity up to (and including) that date
 export const getBalances = (activities: Activity[], asOfDate?: Date) => {
@@ -155,3 +155,67 @@ export const toLocalDateString = (date: Date) => {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 };
+
+// Advances a date to the start of the next recurrence period for the given frequency
+export const getNextOccurrence = (date: Date, frequency: RecurringFrequency): Date => {
+    const next = new Date(date);
+    switch (frequency) {
+        case 'weekly':
+            next.setDate(next.getDate() + 7);
+            break;
+        case 'biweekly':
+            next.setDate(next.getDate() + 14);
+            break;
+        case 'monthly':
+            next.setMonth(next.getMonth() + 1);
+            break;
+        case 'yearly':
+            next.setFullYear(next.getFullYear() + 1);
+            break;
+    }
+    return next;
+};
+
+// Snaps a date back to the start of the calendar period it falls in. Used as the "entry"
+// date: the point at which a recurring rule becomes due and its activity gets created,
+// e.g. the 1st of the month (or the Sunday of the week) rather than the actual pay date.
+export const getPeriodStart = (date: Date, frequency: RecurringFrequency): Date => {
+    switch (frequency) {
+        case 'monthly':
+            return new Date(date.getFullYear(), date.getMonth(), 1);
+        case 'yearly':
+            return new Date(date.getFullYear(), 0, 1);
+        case 'weekly':
+        case 'biweekly': {
+            const start = new Date(date);
+            start.setDate(date.getDate() - date.getDay());
+            return start;
+        }
+    }
+};
+
+// Computes the actual transaction (effective) date within the period that starts at
+// periodStart, preserving the day-of-month/weekday from the rule's original anchor date.
+// E.g. an anchor of the 15th produces Oct 15 for the period that starts Oct 1.
+export const getEffectiveDate = (periodStart: Date, anchorDate: Date, frequency: RecurringFrequency): Date => {
+    switch (frequency) {
+        case 'monthly': {
+            const daysInMonth = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0).getDate();
+            const day = Math.min(anchorDate.getDate(), daysInMonth);
+            return new Date(periodStart.getFullYear(), periodStart.getMonth(), day);
+        }
+        case 'yearly': {
+            const month = anchorDate.getMonth();
+            const daysInMonth = new Date(periodStart.getFullYear(), month + 1, 0).getDate();
+            const day = Math.min(anchorDate.getDate(), daysInMonth);
+            return new Date(periodStart.getFullYear(), month, day);
+        }
+        case 'weekly':
+        case 'biweekly': {
+            const effective = new Date(periodStart);
+            effective.setDate(periodStart.getDate() + anchorDate.getDay());
+            return effective;
+        }
+    }
+};
+
