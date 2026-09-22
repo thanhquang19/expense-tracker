@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Activity, RecurringTransaction, ShoppingListItem } from '@/types';
+import { Activity, Category, PaymentMethod, RecurringTransaction, ShoppingListItem } from '@/types';
 import { parseLocalDate, toLocalDateString, getNextOccurrence, getPeriodStart, getEffectiveDate } from './utils';
 
 const isSupabaseConfigured = () => {
@@ -128,6 +128,153 @@ export const fetchPaymentMethods = async (userId?: number): Promise<string[]> =>
     }
 
     return data.map((pm: any) => pm.payment_method);
+};
+
+export const fetchCategoriesWithIds = async (): Promise<Category[]> => {
+    if (!isSupabaseConfigured()) {
+        return [];
+    }
+
+    const { data, error } = await supabase
+        .from('category')
+        .select('id, category')
+        .order('category');
+
+    if (error) {
+        console.error('Error fetching categories:', error);
+        throw error;
+    }
+
+    return data as Category[];
+};
+
+export const addCategory = async (category: string): Promise<Category> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { data, error } = await supabase
+        .from('category')
+        .insert([{ category }])
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error adding category:', error);
+        throw error;
+    }
+
+    return data as Category;
+};
+
+export const updateCategory = async (id: number, category: string): Promise<Category> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { data, error } = await supabase
+        .from('category')
+        .update({ category })
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating category:', error);
+        throw error;
+    }
+
+    return data as Category;
+};
+
+export const deleteCategory = async (id: number): Promise<void> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { error } = await supabase
+        .from('category')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting category:', error);
+        throw error;
+    }
+};
+
+export const fetchPaymentMethodsWithIds = async (userId: number): Promise<PaymentMethod[]> => {
+    if (!isSupabaseConfigured()) {
+        return [];
+    }
+
+    const { data, error } = await supabase
+        .from('payment_method')
+        .select('id, payment_method')
+        .eq('belong_to', userId)
+        .order('payment_method');
+
+    if (error) {
+        console.error('Error fetching payment methods:', error);
+        throw error;
+    }
+
+    return data as PaymentMethod[];
+};
+
+export const addPaymentMethod = async (paymentMethod: string, userId: number): Promise<PaymentMethod> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { data, error } = await supabase
+        .from('payment_method')
+        .insert([{ payment_method: paymentMethod, belong_to: userId }])
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error adding payment method:', error);
+        throw error;
+    }
+
+    return data as PaymentMethod;
+};
+
+export const updatePaymentMethod = async (id: number, paymentMethod: string): Promise<PaymentMethod> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { data, error } = await supabase
+        .from('payment_method')
+        .update({ payment_method: paymentMethod })
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating payment method:', error);
+        throw error;
+    }
+
+    return data as PaymentMethod;
+};
+
+export const deletePaymentMethod = async (id: number): Promise<void> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { error } = await supabase
+        .from('payment_method')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting payment method:', error);
+        throw error;
+    }
 };
 
 export const fetchRecurringTransactions = async (userId: number): Promise<RecurringTransaction[]> => {

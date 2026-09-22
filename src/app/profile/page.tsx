@@ -1,9 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/components/UserContext';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, User as UserIcon, Mail, LogOut } from 'lucide-react';
+import { Category, PaymentMethod } from '@/types';
+import {
+    fetchCategoriesWithIds,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    fetchPaymentMethodsWithIds,
+    addPaymentMethod,
+    updatePaymentMethod,
+    deletePaymentMethod
+} from '@/lib/api';
+import ManageListSection from '@/components/ManageListSection';
 
 export default function ProfilePage() {
     const { user, updateUser, loading } = useUser();
@@ -11,6 +23,21 @@ export default function ProfilePage() {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [saved, setSaved] = useState(false);
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+
+    const loadLists = useCallback(async (userId: number) => {
+        try {
+            const [categoriesData, paymentMethodsData] = await Promise.all([
+                fetchCategoriesWithIds(),
+                fetchPaymentMethodsWithIds(userId)
+            ]);
+            setCategories(categoriesData);
+            setPaymentMethods(paymentMethodsData);
+        } catch (error) {
+            console.error('Failed to load categories/payment methods', error);
+        }
+    }, []);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -20,8 +47,9 @@ export default function ProfilePage() {
         if (user) {
             setName(user.name);
             setEmail(user.email);
+            loadLists(user.id);
         }
-    }, [user, loading, router]);
+    }, [user, loading, router, loadLists]);
 
     const handleSave = () => {
         if (!user) return;
@@ -35,13 +63,22 @@ export default function ProfilePage() {
         router.push('/signup');
     };
 
+    const handleBack = () => {
+        // Direct loads/refreshes leave no in-app history entry for back() to use
+        if (window.history.length > 1) {
+            router.back();
+        } else {
+            router.push('/');
+        }
+    };
+
     if (loading || !user) return null;
 
     return (
         <div className="p-4 max-w-md mx-auto min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
             <header className="mb-6 flex items-center gap-4">
                 <button
-                    onClick={() => router.back()}
+                    onClick={handleBack}
                     className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-300"
                 >
                     <ArrowLeft size={24} />
@@ -115,6 +152,45 @@ export default function ProfilePage() {
                     <span>Sign Out</span>
                 </button>
             </div>
+
+            <div className="space-y-4 mt-4">
+                <ManageListSection
+                    title="Categories"
+                    addLabel="Add new category"
+                    items={categories.map(c => ({ id: c.id, name: c.category }))}
+                    onAdd={async (name) => {
+                        const created = await addCategory(name);
+                        setCategories(prev => [...prev, created].sort((a, b) => a.category.localeCompare(b.category)));
+                    }}
+                    onUpdate={async (id, name) => {
+                        const updated = await updateCategory(id, name);
+                        setCategories(prev => prev.map(c => c.id === id ? updated : c).sort((a, b) => a.category.localeCompare(b.category)));
+                    }}
+                    onDelete={async (id) => {
+                        await deleteCategory(id);
+                        setCategories(prev => prev.filter(c => c.id !== id));
+                    }}
+                />
+
+                <ManageListSection
+                    title="Payment Methods"
+                    addLabel="Add new payment method"
+                    items={paymentMethods.map(p => ({ id: p.id, name: p.payment_method }))}
+                    onAdd={async (name) => {
+                        const created = await addPaymentMethod(name, user.id);
+                        setPaymentMethods(prev => [...prev, created].sort((a, b) => a.payment_method.localeCompare(b.payment_method)));
+                    }}
+                    onUpdate={async (id, name) => {
+                        const updated = await updatePaymentMethod(id, name);
+                        setPaymentMethods(prev => prev.map(p => p.id === id ? updated : p).sort((a, b) => a.payment_method.localeCompare(b.payment_method)));
+                    }}
+                    onDelete={async (id) => {
+                        await deletePaymentMethod(id);
+                        setPaymentMethods(prev => prev.filter(p => p.id !== id));
+                    }}
+                />
+            </div>
         </div>
     );
 }
+

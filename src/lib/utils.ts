@@ -78,6 +78,12 @@ export const capitalize = (str: string) => {
     return str.charAt(0).toUpperCase() + str.slice(1);
 };
 
+// Capitalizes every word (e.g. "bank account" -> "Bank Account")
+export const titleCase = (str: string) => {
+    if (!str) return '';
+    return str.split(' ').map(capitalize).join(' ');
+};
+
 // Parses a YYYY-MM-DD string as a local date (avoids the UTC shift `new Date(str)` applies)
 export const parseLocalDate = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);

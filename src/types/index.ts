@@ -7,12 +7,12 @@ export interface User {
 export interface PaymentMethod {
     id: number;
     payment_method: string;
+    belong_to?: number;
 }
 
 export interface Category {
     id: number;
     category: string;
-    type: 'Expense' | 'Income';
 }
 
 export interface Activity {
