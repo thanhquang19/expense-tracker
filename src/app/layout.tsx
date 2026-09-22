@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   title: "Expense Tracker",
   description: "Track your expenses easily",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

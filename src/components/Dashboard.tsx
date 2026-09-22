@@ -13,7 +13,7 @@ import {
 } from '@/lib/utils';
 import { Activity } from '@/types';
 import { fetchActivities, addActivity, updateActivity, deleteActivity, fetchCategories, fetchPaymentMethods, processDueRecurringTransactions } from '@/lib/api';
-import { Wallet, Plus, Calendar, ChevronRight, RotateCcw, Moon, Sun, Laptop, User as UserIcon, Filter, X, Repeat } from 'lucide-react';
+import { Wallet, Plus, Calendar, ChevronRight, ChevronDown, ChevronUp, RotateCcw, Moon, Sun, Laptop, User as UserIcon, Filter, X, Repeat } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/components/UserContext';
 import Link from 'next/link';
@@ -31,6 +31,9 @@ export default function Dashboard() {
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
     const [availablePaymentMethods, setAvailablePaymentMethods] = useState<string[]>([]);
     const [showAll, setShowAll] = useState(false);
+    const [showRecentTransactions, setShowRecentTransactions] = useState(true);
+    const [showPeriodSummary, setShowPeriodSummary] = useState(false);
+    const [showAccounts, setShowAccounts] = useState(false);
 
     // Filters (category/payment method only — the date range is shared with the Period picker below)
     const [showFilterMenu, setShowFilterMenu] = useState(false);
@@ -247,23 +250,33 @@ export default function Dashboard() {
             {/* Recent Transactions (Last 10) */}
             <section className="mb-8">
                 <div className="flex justify-between items-center mb-3">
-                    <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Recent Transactions</h2>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setShowFilterMenu(!showFilterMenu)}
-                            className={`text-sm font-medium flex items-center gap-1 transition-colors ${filterCategory || filterPaymentMethod ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}
-                        >
-                            <Filter size={16} />
-                        </button>
-                        <button
-                            onClick={() => setShowAll(!showAll)}
-                            className="text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center"
-                        >
-                            {showAll ? 'Show Less' : 'View All'} <ChevronRight size={16} className={`transition-transform ${showAll ? 'rotate-90' : ''}`} />
-                        </button>
-                    </div>
+                    <button
+                        onClick={() => setShowRecentTransactions(v => !v)}
+                        className="flex items-center gap-1"
+                    >
+                        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Recent Transactions</h2>
+                        {showRecentTransactions ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                    </button>
+                    {showRecentTransactions && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setShowFilterMenu(!showFilterMenu)}
+                                className={`text-sm font-medium flex items-center gap-1 transition-colors ${filterCategory || filterPaymentMethod ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}
+                            >
+                                <Filter size={16} />
+                            </button>
+                            <button
+                                onClick={() => setShowAll(!showAll)}
+                                className="text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center"
+                            >
+                                {showAll ? 'Show Less' : 'View All'} <ChevronRight size={16} className={`transition-transform ${showAll ? 'rotate-90' : ''}`} />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
+                {showRecentTransactions && (
+                <>
                 {/* Filter Menu */}
                 {showFilterMenu && (
                     <div className="mb-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 animate-in slide-in-from-top-2 duration-200">
@@ -354,86 +367,125 @@ export default function Dashboard() {
                         <div className="p-8 text-center text-gray-400">No transactions yet</div>
                     )}
                 </div>
+                </>
+                )}
             </section >
 
             {/* Period Summary (By Category) */}
             < section className="mb-8" >
-                <h2 className="text-lg font-semibold mb-3 text-gray-700 dark:text-gray-200">Period Summary</h2>
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 transition-colors duration-300">
-                    <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-50 dark:border-gray-700">
-                        <div>
-                            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Beginning</p>
-                            <p className="text-lg font-bold text-gray-800 dark:text-white">{formatCurrency(summary.beginningBalance)}</p>
+                <button
+                    onClick={() => setShowPeriodSummary(v => !v)}
+                    className="w-full flex justify-between items-center mb-3"
+                >
+                    <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Period Summary</h2>
+                    {showPeriodSummary ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                </button>
+                {showPeriodSummary && (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 transition-colors duration-300">
+                        <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-50 dark:border-gray-700">
+                            <div>
+                                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Beginning</p>
+                                <p className="text-lg font-bold text-gray-800 dark:text-white">{formatCurrency(summary.beginningBalance)}</p>
+                            </div>
+                            <div className="text-center">
+                                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Net Amount</p>
+                                <p className={`text-lg font-bold ${(summary.endingBalance - summary.beginningBalance) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                    {formatCurrency(summary.endingBalance - summary.beginningBalance)}
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Ending</p>
+                                <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{formatCurrency(summary.endingBalance)}</p>
+                            </div>
                         </div>
-                        <div className="text-center">
-                            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Net Amount</p>
-                            <p className={`text-lg font-bold ${(summary.endingBalance - summary.beginningBalance) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                {formatCurrency(summary.endingBalance - summary.beginningBalance)}
-                            </p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Ending</p>
-                            <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{formatCurrency(summary.endingBalance)}</p>
-                        </div>
-                    </div>
 
-                    <div className="space-y-4">
-                        <h3 className="text-xs font-semibold text-gray-400 uppercase">Category Breakdown</h3>
-                        {categorySummary.length > 0 ? (
-                            categorySummary.map((item) => (
-                                <div
-                                    key={item.category}
-                                    className="flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 p-1 rounded-lg transition-colors"
-                                    onClick={() => {
-                                        setFilterCategory(item.category);
-                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                    }}
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <div className={`w-2 h-2 rounded-full ${item.amount > 0 ? 'bg-green-500' : 'bg-red-400'}`}></div>
-                                        <span className="text-sm text-gray-600 dark:text-gray-300">{capitalize(item.category)}</span>
+                        <div className="space-y-4">
+                            <h3 className="text-xs font-semibold text-gray-400 uppercase">Category Breakdown</h3>
+                            {categorySummary.length > 0 ? (
+                                categorySummary.map((item) => (
+                                    <div
+                                        key={item.category}
+                                        className="flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 p-1 rounded-lg transition-colors"
+                                        onClick={() => {
+                                            setFilterCategory(item.category);
+                                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-2 h-2 rounded-full ${item.amount > 0 ? 'bg-green-500' : 'bg-red-400'}`}></div>
+                                            <span className="text-sm text-gray-600 dark:text-gray-300">{capitalize(item.category)}</span>
+                                        </div>
+                                        <span className={`text-sm font-semibold ${item.amount > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{formatCurrency(item.amount)}</span>
                                     </div>
-                                    <span className={`text-sm font-semibold ${item.amount > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{formatCurrency(item.amount)}</span>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-sm text-gray-400 italic text-center py-2">No expenses in this period</p>
-                        )}
+                                ))
+                            ) : (
+                                <p className="text-sm text-gray-400 italic text-center py-2">No expenses in this period</p>
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
             </section >
 
             {/* Account Cards (Moved to Bottom) */}
             < section className="mb-8" >
-                <div className="flex justify-between items-center mb-3">
+                <button
+                    onClick={() => setShowAccounts(v => !v)}
+                    className="w-full flex justify-between items-center mb-3"
+                >
                     <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Accounts</h2>
-                    <span className="text-xs text-gray-400">as of {formatDate(endDate)}</span>
-                </div>
-                <div className="grid grid-rows-2 grid-flow-col gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                    {availablePaymentMethods.map((pm) => (
-                        <div
-                            key={pm}
-                            onClick={() => {
-                                setFilterPaymentMethod(pm);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }}
-                            className="w-[140px] p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-between h-24 shrink-0 transition-all duration-300 cursor-pointer hover:scale-[0.98] hover:shadow-md"
-                        >
-                            <div className="flex items-start justify-between">
-                                <div className="p-1.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
-                                    <Wallet size={16} />
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">as of {formatDate(endDate)}</span>
+                        {showAccounts ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                    </div>
+                </button>
+                {showAccounts && (
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                            {activeAccounts.filter(pm => balances[pm] >= 0).map((pm) => (
+                                <div
+                                    key={pm}
+                                    onClick={() => {
+                                        setFilterPaymentMethod(pm);
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="w-full p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-all duration-300 cursor-pointer hover:shadow-md"
+                                >
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="p-1.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                                            <Wallet size={14} />
+                                        </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{capitalize(pm)}</p>
+                                    </div>
+                                    <p className="text-sm font-bold text-green-600 dark:text-green-400 text-right">
+                                        {formatCurrency(balances[pm] || 0)}
+                                    </p>
                                 </div>
-                                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Active</span>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate mb-0.5">{capitalize(pm)}</p>
-                                <p className={`text-base font-bold ${balances[pm] < 0 ? 'text-red-600 dark:text-red-400' : balances[pm] > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-800 dark:text-white'}`}>
-                                    {formatCurrency(Math.abs(balances[pm] || 0))}
-                                </p>
-                            </div>
+                            ))}
                         </div>
-                    ))}
-                </div>
+                        <div className="space-y-2">
+                            {activeAccounts.filter(pm => balances[pm] < 0).map((pm) => (
+                                <div
+                                    key={pm}
+                                    onClick={() => {
+                                        setFilterPaymentMethod(pm);
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="w-full p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-all duration-300 cursor-pointer hover:shadow-md"
+                                >
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="p-1.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                                            <Wallet size={14} />
+                                        </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{capitalize(pm)}</p>
+                                    </div>
+                                    <p className="text-sm font-bold text-red-600 dark:text-red-400 text-right">
+                                        {formatCurrency(Math.abs(balances[pm] || 0))}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </section >
 
             <TransactionModal

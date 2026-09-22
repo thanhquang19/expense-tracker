@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, PieChart, Repeat } from 'lucide-react';
+import { Home, PieChart, Repeat, ShoppingCart } from 'lucide-react';
 
 const tabs = [
     { href: '/', label: 'Home', icon: Home },
     { href: '/reports', label: 'Reports', icon: PieChart },
-    { href: '/recurring', label: 'Recurring', icon: Repeat }
+    { href: '/recurring', label: 'Recurring', icon: Repeat },
+    { href: '/shopping', label: 'Shopping', icon: ShoppingCart }
 ];
 
 export default function BottomNav() {

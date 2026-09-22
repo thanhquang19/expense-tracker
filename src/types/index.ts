@@ -28,6 +28,19 @@ export interface Activity {
     recurring_id?: number | null;
 }
 
+export type ShoppingCategory = 'grocery' | 'large_item';
+
+export interface ShoppingListItem {
+    id: number;
+    user_id: number;
+    name: string;
+    quantity: number;
+    category: ShoppingCategory;
+    price: number | null;
+    is_purchased: boolean;
+    created_at: string;
+}
+
 export type RecurringFrequency = 'weekly' | 'biweekly' | 'monthly' | 'yearly';
 
 export interface RecurringTransaction {

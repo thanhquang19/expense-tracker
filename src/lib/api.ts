@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Activity, RecurringTransaction } from '@/types';
+import { Activity, RecurringTransaction, ShoppingListItem } from '@/types';
 import { parseLocalDate, toLocalDateString, getNextOccurrence, getPeriodStart, getEffectiveDate } from './utils';
 
 const isSupabaseConfigured = () => {
@@ -227,6 +227,85 @@ export const deleteRecurringTransaction = async (id: number): Promise<void> => {
 
     if (error) {
         console.error('Error deleting recurring transaction:', error);
+        throw error;
+    }
+};
+
+export const fetchShoppingListItems = async (userId: number): Promise<ShoppingListItem[]> => {
+    if (!isSupabaseConfigured()) {
+        return [];
+    }
+
+    const { data, error } = await supabase
+        .from('shopping_list_item')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at');
+
+    if (error) {
+        console.error('Error fetching shopping list items:', error);
+        throw error;
+    }
+
+    return data as ShoppingListItem[];
+};
+
+export const addShoppingListItem = async (
+    item: Omit<ShoppingListItem, 'id' | 'created_at'>
+): Promise<ShoppingListItem> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { data, error } = await supabase
+        .from('shopping_list_item')
+        .insert([item])
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error adding shopping list item:', error);
+        throw error;
+    }
+
+    return data as ShoppingListItem;
+};
+
+export const updateShoppingListItem = async (
+    id: number,
+    item: Partial<Omit<ShoppingListItem, 'id' | 'created_at'>>
+): Promise<ShoppingListItem> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { data, error } = await supabase
+        .from('shopping_list_item')
+        .update(item)
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating shopping list item:', error);
+        throw error;
+    }
+
+    return data as ShoppingListItem;
+};
+
+export const deleteShoppingListItem = async (id: number): Promise<void> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { error } = await supabase
+        .from('shopping_list_item')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting shopping list item:', error);
         throw error;
     }
 };
