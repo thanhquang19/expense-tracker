@@ -1,35 +1,74 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
-import { login } from './actions';
+import { useState } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/components/UserContext';
 
-const initialState = {
-    message: '',
-    type: '' as '' | 'error' | 'success',
-    user: undefined as { id: number, name: string, email: string } | undefined
-};
+function loginErrorMessage(error: unknown): string {
+    const code = (error as { code?: string })?.code;
+    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+        return 'Invalid email or password';
+    }
+    if (code === 'auth/too-many-requests') {
+        return 'Too many attempts. Please try again later.';
+    }
+    return 'An unexpected error occurred';
+}
 
 export default function Login() {
-    const [state, formAction, isPending] = useActionState(login, initialState);
     const router = useRouter();
-    const { updateUser } = useUser();
+    const { setUser } = useUser();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [message, setMessage] = useState('');
+    const [isPending, setIsPending] = useState(false);
 
-    useEffect(() => {
-        if (state.type === 'success' && state.user) {
-            // Update context and local storage via updateUser
-            updateUser({
-                id: state.user.id,
-                name: state.user.name,
-                email: state.user.email
-            });
-            // Redirect to dashboard
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setMessage('');
+        setIsPending(true);
+        try {
+            const credential = await signInWithEmailAndPassword(auth, email, password);
+
+            let { data: profile, error: profileError } = await supabase
+                .from('user')
+                .select('id, user_name, user_email, firebase_uid')
+                .eq('firebase_uid', credential.user.uid)
+                .single();
+
+            // First login for a Firebase account created outside the signup flow (e.g. added
+            // directly in the Firebase console): claim the matching legacy profile by email.
+            if ((profileError || !profile) && credential.user.email) {
+                const claimed = await supabase
+                    .from('user')
+                    .update({ firebase_uid: credential.user.uid })
+                    .eq('user_email', credential.user.email)
+                    .is('firebase_uid', null)
+                    .select('id, user_name, user_email, firebase_uid')
+                    .single();
+                profile = claimed.data;
+                profileError = claimed.error;
+            }
+
+            if (profileError || !profile) {
+                setMessage('No profile found for this account.');
+                return;
+            }
+
+            setUser({ id: profile.id, name: profile.user_name, email: profile.user_email, firebaseUid: profile.firebase_uid });
             router.push('/');
+        } catch (error) {
+            console.error('Login failed:', error);
+            setMessage(loginErrorMessage(error));
+        } finally {
+            setIsPending(false);
         }
-    }, [state, router, updateUser]);
+    };
 
     return (
         <div className="flex min-h-screen items-center justify-center p-4 bg-gray-50 dark:bg-gray-900">
@@ -39,7 +78,7 @@ export default function Login() {
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Sign in to continue</p>
                 </div>
 
-                <form action={formAction} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-4">
                     {/* Email */}
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 uppercase mb-1" htmlFor="user_email">
@@ -50,6 +89,8 @@ export default function Login() {
                             id="user_email"
                             name="user_email"
                             required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                             className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white transition-colors"
                             placeholder="john@example.com"
                         />
@@ -65,15 +106,17 @@ export default function Login() {
                             id="password"
                             name="password"
                             required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
                             className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white transition-colors"
                             placeholder="••••••••"
                         />
                     </div>
 
                     {/* Error Message */}
-                    {state?.message && state.type === 'error' && (
+                    {message && (
                         <div className="p-3 rounded-lg text-sm font-medium bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400">
-                            {state.message}
+                            {message}
                         </div>
                     )}
 

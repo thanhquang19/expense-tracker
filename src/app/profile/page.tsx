@@ -13,12 +13,13 @@ import {
     fetchPaymentMethodsWithIds,
     addPaymentMethod,
     updatePaymentMethod,
-    deletePaymentMethod
+    deletePaymentMethod,
+    updateUserProfile
 } from '@/lib/api';
 import ManageListSection from '@/components/ManageListSection';
 
 export default function ProfilePage() {
-    const { user, updateUser, loading } = useUser();
+    const { user, setUser, signOut, loading } = useUser();
     const router = useRouter();
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -51,16 +52,22 @@ export default function ProfilePage() {
         }
     }, [user, loading, router, loadLists]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!user) return;
-        updateUser({ ...user, name, email });
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        try {
+            await updateUserProfile(user.id, { user_name: name, user_email: user.email });
+            setUser({ ...user, name });
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+        } catch (error) {
+            console.error('Failed to save profile', error);
+            alert('Failed to save profile. Please try again.');
+        }
     };
 
-    const handleSignOut = () => {
-        updateUser(null);
-        router.push('/signup');
+    const handleSignOut = async () => {
+        await signOut();
+        router.push('/login');
     };
 
     const handleBack = () => {
@@ -120,11 +127,11 @@ export default function ProfilePage() {
                             <input
                                 type="email"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full pl-10 p-3 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/20 bg-white dark:bg-gray-700 dark:text-white transition-all"
-                                placeholder="Enter your email"
+                                disabled
+                                className="w-full pl-10 p-3 border border-gray-200 dark:border-gray-600 rounded-xl outline-none bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                             />
                         </div>
+                        <p className="text-xs text-gray-400 mt-1">Email is tied to your sign-in account and can't be changed here.</p>
                     </div>
                 </div>
 

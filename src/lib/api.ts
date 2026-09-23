@@ -88,6 +88,29 @@ export const deleteActivity = async (id: number): Promise<void> => {
     }
 };
 
+export const updateUserProfile = async (
+    id: number,
+    profile: { user_name: string; user_email: string }
+): Promise<{ id: number; user_name: string; user_email: string }> => {
+    if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+    }
+
+    const { data, error } = await supabase
+        .from('user')
+        .update(profile)
+        .eq('id', id)
+        .select('id, user_name, user_email')
+        .single();
+
+    if (error) {
+        console.error('Error updating user profile:', error);
+        throw error;
+    }
+
+    return data;
+};
+
 export const fetchCategories = async (): Promise<string[]> => {
     if (!isSupabaseConfigured()) {
         return [];

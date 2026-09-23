@@ -1,67 +1,71 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 
 interface User {
     id: number;
     name: string;
     email: string;
+    firebaseUid: string;
 }
 
 interface UserContextType {
     user: User | null;
-    updateUser: (user: User | null) => void;
     loading: boolean;
+    // Sets the profile optimistically right after sign-in/sign-up/profile edit,
+    // instead of waiting on the async onAuthStateChanged + DB round trip below.
+    setUser: (user: User | null) => void;
+    signOut: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+// Looks up the app's bigint-keyed `user` profile row linked to a Firebase account.
+// Requires the caller to already hold a valid Firebase session (RLS restricts this
+// to the caller's own row via auth.jwt()->>'sub').
+async function fetchProfile(firebaseUid: string): Promise<User | null> {
+    const { data, error } = await supabase
+        .from('user')
+        .select('id, user_name, user_email, firebase_uid')
+        .eq('firebase_uid', firebaseUid)
+        .single();
+
+    if (error || !data) return null;
+    return { id: data.id, name: data.user_name, email: data.user_email, firebaseUid: data.firebase_uid };
+}
+
 export function UserProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUserState] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Load user from localStorage on mount
-        const storedUser = localStorage.getItem('expense_tracker_user');
-        if (storedUser) {
-            try {
-                let parsedUser = JSON.parse(storedUser);
-
-                // Validate user structure (must have id)
-                if (!parsedUser || typeof parsedUser.id !== 'number') {
-                    console.warn('Invalid user session found. Clearing.');
-                    localStorage.removeItem('expense_tracker_user');
-                    setUser(null);
-                } else {
-                    // Normalize Jane Doe -> Jane_doe
-                    if (parsedUser.name && parsedUser.name.toLowerCase() === 'jane doe') {
-                        parsedUser = { ...parsedUser, name: 'Jane_doe' };
-                    }
-                    setUser(parsedUser);
-                }
-            } catch (e) {
-                console.error('Failed to parse user from local storage', e);
-                localStorage.removeItem('expense_tracker_user');
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (!firebaseUser) {
+                setUserState(null);
+                setLoading(false);
+                return;
             }
-        }
-        setLoading(false);
+            const profile = await fetchProfile(firebaseUser.uid);
+            setUserState(profile);
+            setLoading(false);
+        });
+        return unsubscribe;
     }, []);
 
-    const updateUser = useCallback((newUser: User | null) => {
-        if (newUser) {
-            // Normalize Jane Doe -> Jane_doe
-            if (newUser.name && newUser.name.toLowerCase() === 'jane doe') {
-                newUser = { ...newUser, name: 'Jane_doe' };
-            }
-            localStorage.setItem('expense_tracker_user', JSON.stringify(newUser));
-        } else {
-            localStorage.removeItem('expense_tracker_user');
-        }
-        setUser(newUser);
+    const setUser = useCallback((newUser: User | null) => {
+        setUserState(newUser);
+    }, []);
+
+    const signOut = useCallback(async () => {
+        await firebaseSignOut(auth);
+        setUserState(null);
     }, []);
 
     return (
-        <UserContext.Provider value={{ user, updateUser, loading }}>
+        <UserContext.Provider value={{ user, loading, setUser, signOut }}>
             {children}
         </UserContext.Provider>
     );
