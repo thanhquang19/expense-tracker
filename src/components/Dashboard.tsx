@@ -13,7 +13,7 @@ import {
 } from '@/lib/utils';
 import { Activity } from '@/types';
 import { fetchActivities, addActivity, updateActivity, deleteActivity, fetchCategories, fetchPaymentMethods, processDueRecurringTransactions } from '@/lib/api';
-import { Wallet, Plus, Calendar, ChevronRight, ChevronDown, ChevronUp, RotateCcw, Moon, Sun, Laptop, User as UserIcon, Filter, X, Repeat } from 'lucide-react';
+import { Wallet, Plus, Calendar, ChevronRight, ChevronDown, ChevronUp, RotateCcw, Moon, Sun, Laptop, User as UserIcon, Filter, X, Repeat, Camera } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/components/UserContext';
 import Link from 'next/link';
@@ -54,6 +54,7 @@ export default function Dashboard() {
 
     const [showForm, setShowForm] = useState(false);
     const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+    const [scanShortcut, setScanShortcut] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -203,6 +204,18 @@ export default function Dashboard() {
                             <Moon size={16} />
                         </button>
                     </div>
+
+                    <button
+                        onClick={() => {
+                            setEditingActivity(null);
+                            setScanShortcut(true);
+                            setShowForm(true);
+                        }}
+                        className="p-3 bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 rounded-full shadow-lg border border-gray-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition active:scale-95"
+                        title="Scan Receipt"
+                    >
+                        <Camera size={24} />
+                    </button>
 
                     <button
                         onClick={() => {
@@ -493,7 +506,11 @@ export default function Dashboard() {
                 editingActivity={editingActivity}
                 categories={availableCategories}
                 paymentMethods={availablePaymentMethods}
-                onClose={() => setShowForm(false)}
+                autoStartScan={scanShortcut}
+                onClose={() => {
+                    setShowForm(false);
+                    setScanShortcut(false);
+                }}
                 onSave={handleSaveActivity}
                 onDelete={handleDeleteActivity}
             />

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Loader2, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Loader2, Trash2, Camera } from 'lucide-react';
 import { Activity } from '@/types';
 import { capitalize, toLocalDateString } from '@/lib/utils';
+import { scanReceipt } from '@/lib/receiptScanner';
 import { useUser } from '@/components/UserContext';
 
 interface TransactionModalProps {
@@ -11,14 +12,21 @@ interface TransactionModalProps {
     editingActivity: Activity | null;
     categories: string[];
     paymentMethods: string[];
+    // Opens the receipt file/camera picker as soon as the modal opens (the Dashboard's scan shortcut).
+    autoStartScan?: boolean;
     onClose: () => void;
     onSave: (activity: Omit<Activity, 'id' | 'created_at'>, editingId: number | null) => Promise<void>;
     onDelete: (id: number) => Promise<void>;
 }
 
-export default function TransactionModal({ isOpen, editingActivity, categories, paymentMethods, onClose, onSave, onDelete }: TransactionModalProps) {
+export default function TransactionModal({ isOpen, editingActivity, categories, paymentMethods, autoStartScan, onClose, onSave, onDelete }: TransactionModalProps) {
     const { user } = useUser();
     const [submitting, setSubmitting] = useState(false);
+    const [scanning, setScanning] = useState(false);
+    const [scanProgress, setScanProgress] = useState(0);
+    const [scanNotice, setScanNotice] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const autoScanTriggered = useRef(false);
     const [form, setForm] = useState({
         date: toLocalDateString(new Date()),
         transaction: '',
@@ -49,9 +57,50 @@ export default function TransactionModal({ isOpen, editingActivity, categories, 
                 category: categories[0] || ''
             });
         }
+        setScanNotice('');
     }, [isOpen, editingActivity, categories, paymentMethods]);
 
+    useEffect(() => {
+        if (!isOpen) {
+            autoScanTriggered.current = false;
+            return;
+        }
+        if (autoStartScan && !editingActivity && !autoScanTriggered.current) {
+            autoScanTriggered.current = true;
+            fileInputRef.current?.click();
+        }
+    }, [isOpen, autoStartScan, editingActivity]);
+
     if (!isOpen || !user) return null;
+
+    const handleReceiptSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // allow re-selecting the same file later
+        if (!file) return;
+
+        setScanning(true);
+        setScanProgress(0);
+        setScanNotice('');
+        try {
+            const result = await scanReceipt(file, setScanProgress);
+            if (result.amount == null && result.date == null && result.merchant == null) {
+                setScanNotice("Couldn't read that receipt clearly — please enter the details manually.");
+                return;
+            }
+            setForm(prev => ({
+                ...prev,
+                amount: result.amount ?? prev.amount,
+                date: result.date ?? prev.date,
+                transaction: result.merchant ?? prev.transaction
+            }));
+            setScanNotice('Detected details from your receipt — please review before saving.');
+        } catch (error) {
+            console.error('Failed to scan receipt', error);
+            setScanNotice("Couldn't read that receipt clearly — please enter the details manually.");
+        } finally {
+            setScanning(false);
+        }
+    };
 
     const handleSave = async () => {
         setSubmitting(true);
@@ -148,7 +197,20 @@ export default function TransactionModal({ isOpen, editingActivity, categories, 
 
                     {/* Description Row */}
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Description</label>
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs font-semibold text-gray-500 uppercase">Description</label>
+                            {!editingActivity && (
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={scanning}
+                                    className="flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-50"
+                                >
+                                    {scanning ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+                                    {scanning ? `Scanning… ${scanProgress}%` : 'Scan Receipt'}
+                                </button>
+                            )}
+                        </div>
                         <input
                             type="text"
                             className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl text-sm outline-none focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white"
@@ -156,6 +218,19 @@ export default function TransactionModal({ isOpen, editingActivity, categories, 
                             value={form.transaction}
                             onChange={(e) => setForm({ ...form, transaction: e.target.value })}
                         />
+                        {!editingActivity && (
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={handleReceiptSelected}
+                                className="hidden"
+                            />
+                        )}
+                        {scanNotice && (
+                            <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{scanNotice}</p>
+                        )}
                     </div>
 
                     {/* Category */}
