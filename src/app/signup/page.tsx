@@ -52,20 +52,13 @@ export default function Signup() {
                 return;
             }
 
-            // 2. Seed default "Cash" payment method
-            const { error: seedError } = await supabase
-                .from('payment_method')
-                .insert([{ payment_method: 'Cash', belong_to: newUser.id }]);
-
-            if (seedError) {
-                console.error('Error seeding default account:', seedError);
-                // Continue anyway, it's not fatal for signup success
-            }
+            // No per-user seeding needed here: the system-wide "Cash" payment method and default
+            // categories (belong_to is null) are already visible to every signed-in user via RLS.
 
             setUser({ id: newUser.id, name: userName, email, firebaseUid: credential.user.uid });
             setMessageType('success');
             setMessage('Account created successfully! Redirecting...');
-            setTimeout(() => router.push('/'), 1000);
+            setTimeout(() => router.push('/profile?welcome=1'), 1000);
         } catch (error) {
             console.error('Signup failed:', error);
             if (createdFirebaseUid) {

@@ -1,25 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Check, X, Loader2, ChevronDown } from 'lucide-react';
 import { titleCase } from '@/lib/utils';
 
 interface ManageListItem {
     id: number;
     name: string;
+    isSystem?: boolean;
 }
 
 interface ManageListSectionProps {
     title: string;
     items: ManageListItem[];
     addLabel: string;
+    defaultOpen?: boolean;
     onAdd: (name: string) => Promise<void>;
     onUpdate: (id: number, name: string) => Promise<void>;
     onDelete: (id: number) => Promise<void>;
 }
 
-export default function ManageListSection({ title, items, addLabel, onAdd, onUpdate, onDelete }: ManageListSectionProps) {
-    const [isOpen, setIsOpen] = useState(false);
+export default function ManageListSection({ title, items, addLabel, defaultOpen = false, onAdd, onUpdate, onDelete }: ManageListSectionProps) {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+    // defaultOpen can flip to true after mount (e.g. once the post-signup welcome flow is detected).
+    useEffect(() => {
+        if (defaultOpen) setIsOpen(true);
+    }, [defaultOpen]);
     const [newName, setNewName] = useState('');
     const [adding, setAdding] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -129,19 +135,25 @@ export default function ManageListSection({ title, items, addLabel, onAdd, onUpd
                         ) : (
                             <>
                                 <span className="flex-1 min-w-0 truncate text-sm text-gray-700 dark:text-gray-200">{titleCase(item.name)}</span>
-                                <button
-                                    onClick={() => startEditing(item)}
-                                    className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
-                                >
-                                    <Pencil size={16} />
-                                </button>
-                                <button
-                                    onClick={() => handleDelete(item.id)}
-                                    disabled={deletingId === item.id}
-                                    className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50"
-                                >
-                                    {deletingId === item.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                                </button>
+                                {item.isSystem ? (
+                                    <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 px-1.5 py-0.5">Default</span>
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={() => startEditing(item)}
+                                            className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                                        >
+                                            <Pencil size={16} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(item.id)}
+                                            disabled={deletingId === item.id}
+                                            className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50"
+                                        >
+                                            {deletingId === item.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                        </button>
+                                    </>
+                                )}
                             </>
                         )}
                     </div>

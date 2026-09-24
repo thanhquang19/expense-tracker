@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/components/UserContext';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, User as UserIcon, Mail, LogOut } from 'lucide-react';
+import { ArrowLeft, Save, User as UserIcon, Mail, LogOut, Sparkles, X } from 'lucide-react';
 import { Category, PaymentMethod } from '@/types';
 import {
     fetchCategoriesWithIds,
@@ -26,11 +26,12 @@ export default function ProfilePage() {
     const [saved, setSaved] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+    const [showWelcome, setShowWelcome] = useState(false);
 
     const loadLists = useCallback(async (userId: number) => {
         try {
             const [categoriesData, paymentMethodsData] = await Promise.all([
-                fetchCategoriesWithIds(),
+                fetchCategoriesWithIds(userId),
                 fetchPaymentMethodsWithIds(userId)
             ]);
             setCategories(categoriesData);
@@ -51,6 +52,15 @@ export default function ProfilePage() {
             loadLists(user.id);
         }
     }, [user, loading, router, loadLists]);
+
+    // Just-registered users are sent here with ?welcome=1 to be nudged into personalizing
+    // their categories/payment methods instead of only seeing the shared system defaults.
+    useEffect(() => {
+        if (new URLSearchParams(window.location.search).get('welcome') === '1') {
+            setShowWelcome(true);
+            router.replace('/profile');
+        }
+    }, [router]);
 
     const handleSave = async () => {
         if (!user) return;
@@ -92,6 +102,25 @@ export default function ProfilePage() {
                 </button>
                 <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Edit Profile</h1>
             </header>
+
+            {showWelcome && (
+                <div className="mb-4 flex items-start gap-3 rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-4">
+                    <Sparkles size={20} className="mt-0.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                    <div className="flex-1 text-sm text-blue-800 dark:text-blue-300">
+                        <p className="font-semibold">Welcome! Let&apos;s personalize your account.</p>
+                        <p className="mt-1">
+                            We&apos;ve added some default categories and a default &quot;Cash&quot; payment method to get you started.
+                            Add your own below — they&apos;ll only be visible to you.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => setShowWelcome(false)}
+                        className="p-1 text-blue-400 hover:text-blue-600 dark:hover:text-blue-300"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+            )}
 
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-6">
                 <div className="flex flex-col items-center mb-6">
@@ -164,9 +193,10 @@ export default function ProfilePage() {
                 <ManageListSection
                     title="Categories"
                     addLabel="Add new category"
-                    items={categories.map(c => ({ id: c.id, name: c.category }))}
+                    defaultOpen={showWelcome}
+                    items={categories.map(c => ({ id: c.id, name: c.category, isSystem: c.belong_to == null }))}
                     onAdd={async (name) => {
-                        const created = await addCategory(name);
+                        const created = await addCategory(name, user.id);
                         setCategories(prev => [...prev, created].sort((a, b) => a.category.localeCompare(b.category)));
                     }}
                     onUpdate={async (id, name) => {
@@ -182,7 +212,8 @@ export default function ProfilePage() {
                 <ManageListSection
                     title="Payment Methods"
                     addLabel="Add new payment method"
-                    items={paymentMethods.map(p => ({ id: p.id, name: p.payment_method }))}
+                    defaultOpen={showWelcome}
+                    items={paymentMethods.map(p => ({ id: p.id, name: p.payment_method, isSystem: p.belong_to == null }))}
                     onAdd={async (name) => {
                         const created = await addPaymentMethod(name, user.id);
                         setPaymentMethods(prev => [...prev, created].sort((a, b) => a.payment_method.localeCompare(b.payment_method)));

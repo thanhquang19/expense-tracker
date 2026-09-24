@@ -7,12 +7,15 @@ export interface User {
 export interface PaymentMethod {
     id: number;
     payment_method: string;
-    belong_to?: number;
+    // null/undefined belong_to means a system-wide default (e.g. "Cash"), shown to every user.
+    belong_to?: number | null;
 }
 
 export interface Category {
     id: number;
     category: string;
+    // null/undefined belong_to means a system category, shown to every user.
+    belong_to?: number | null;
 }
 
 export interface Activity {

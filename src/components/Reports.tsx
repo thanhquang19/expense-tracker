@@ -49,7 +49,7 @@ export default function Reports() {
     useEffect(() => {
         if (!user) return;
         setLoading(true);
-        Promise.all([fetchActivities(user.id), fetchCategories(), fetchPaymentMethods(user.id)])
+        Promise.all([fetchActivities(user.id), fetchCategories(user.id), fetchPaymentMethods(user.id)])
             .then(([activitiesData, categoriesData, paymentMethodsData]) => {
                 setActivities(activitiesData);
                 setAvailableCategories(categoriesData);

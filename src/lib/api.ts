@@ -111,15 +111,20 @@ export const updateUserProfile = async (
     return data;
 };
 
-export const fetchCategories = async (): Promise<string[]> => {
+export const fetchCategories = async (userId?: number): Promise<string[]> => {
     if (!isSupabaseConfigured()) {
         return [];
     }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('category')
         .select('category')
         .order('category');
+
+    // System categories (belong_to is null) plus the user's own.
+    query = userId ? query.or(`belong_to.is.null,belong_to.eq.${userId}`) : query.is('belong_to', null);
+
+    const { data, error } = await query;
 
     if (error) {
         console.error('Error fetching categories:', error);
@@ -139,9 +144,8 @@ export const fetchPaymentMethods = async (userId?: number): Promise<string[]> =>
         .select('payment_method')
         .order('payment_method');
 
-    if (userId) {
-        query = query.eq('belong_to', userId);
-    }
+    // System payment methods (belong_to is null, i.e. "Cash") plus the user's own.
+    query = userId ? query.or(`belong_to.is.null,belong_to.eq.${userId}`) : query.is('belong_to', null);
 
     const { data, error } = await query;
 
@@ -153,15 +157,19 @@ export const fetchPaymentMethods = async (userId?: number): Promise<string[]> =>
     return data.map((pm: any) => pm.payment_method);
 };
 
-export const fetchCategoriesWithIds = async (): Promise<Category[]> => {
+export const fetchCategoriesWithIds = async (userId?: number): Promise<Category[]> => {
     if (!isSupabaseConfigured()) {
         return [];
     }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('category')
-        .select('id, category')
+        .select('id, category, belong_to')
         .order('category');
+
+    query = userId ? query.or(`belong_to.is.null,belong_to.eq.${userId}`) : query.is('belong_to', null);
+
+    const { data, error } = await query;
 
     if (error) {
         console.error('Error fetching categories:', error);
@@ -171,14 +179,14 @@ export const fetchCategoriesWithIds = async (): Promise<Category[]> => {
     return data as Category[];
 };
 
-export const addCategory = async (category: string): Promise<Category> => {
+export const addCategory = async (category: string, userId: number): Promise<Category> => {
     if (!isSupabaseConfigured()) {
         throw new Error('Supabase not configured');
     }
 
     const { data, error } = await supabase
         .from('category')
-        .insert([{ category }])
+        .insert([{ category, belong_to: userId }])
         .select()
         .single();
 
@@ -233,8 +241,8 @@ export const fetchPaymentMethodsWithIds = async (userId: number): Promise<Paymen
 
     const { data, error } = await supabase
         .from('payment_method')
-        .select('id, payment_method')
-        .eq('belong_to', userId)
+        .select('id, payment_method, belong_to')
+        .or(`belong_to.is.null,belong_to.eq.${userId}`)
         .order('payment_method');
 
     if (error) {

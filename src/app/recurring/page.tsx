@@ -40,7 +40,7 @@ export default function RecurringPage() {
             setLoading(true);
             const [recurringData, categoriesData, paymentMethodsData] = await Promise.all([
                 fetchRecurringTransactions(user.id),
-                fetchCategories(),
+                fetchCategories(user.id),
                 fetchPaymentMethods(user.id)
             ]);
             setRecurring(recurringData);

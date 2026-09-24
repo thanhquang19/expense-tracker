@@ -73,7 +73,7 @@ export default function Dashboard() {
 
             const [activitiesData, categoriesData, paymentMethodsData] = await Promise.all([
                 fetchActivities(user.id),
-                fetchCategories(),
+                fetchCategories(user.id),
                 fetchPaymentMethods(user.id)
             ]);
 
